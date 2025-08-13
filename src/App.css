@@ -1,0 +1,326 @@
+/* Layout styles */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background: linear-gradient(120deg, #232526 0%, #414345 100%);
+  font-size: 14px; /* Reduced from default 16px */
+}
+
+.sidebar {
+  width: 220px;
+  background: #181a1b;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 2rem 1rem 1rem 1rem;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+  z-index: 2;
+}
+.sidebar h2 {
+  margin: 0 0 2rem 0;
+  font-size: 1.4em; /* Reduced from 1.6em */
+  letter-spacing: 1px;
+  text-align: center;
+}
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sidebar nav button {
+  background: none;
+  border: none;
+  color: #bbb;
+  font-size: 1em; /* Reduced from 1.1em */
+  padding: 0.7em 1em;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.sidebar nav button.active,
+.sidebar nav button:hover {
+  background: #232526;
+  color: #41d1ff;
+}
+.sidebar-footer {
+  margin-top: auto;
+  text-align: center;
+  padding-top: 2rem;
+}
+
+.main-content {
+  flex: 1;
+  padding: 2.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  font-size: 0.95em; /* Slightly smaller font for main content */
+}
+
+/* Tag badge styles */
+.tag-badge {
+  display: inline-block;
+  background: #232526;
+  color: #41d1ff;
+  border-radius: 12px;
+  padding: 0.2em 0.8em;
+  font-size: 0.85em; /* Reduced from 0.95em */
+  margin-right: 0.5em;
+  margin-bottom: 0.2em;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.tag-badge.selected,
+.tag-badge:hover {
+  background: #41d1ff;
+  color: #fff;
+}
+
+/* Note card styling */
+.note-card {
+  background: #222;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  margin-bottom: 1em;
+  overflow: visible; /* Changed from hidden to allow dropdown to show */
+  transition: all 0.2s ease;
+  color: #fff; /* Set text color to white */
+}
+
+.note-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+}
+
+.note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1em 1.5em;
+  border-bottom: 1px solid transparent;
+  position: relative; /* Added for dropdown positioning */
+}
+
+.note-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0.5em 0;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+  color: #fff; /* Ensure title text is white */
+}
+
+.note-title:hover {
+  background: rgba(65, 209, 255, 0.1);
+}
+
+.note-title strong {
+  font-size: 1em; /* Reduced from 1.1em */
+  color: #fff;
+}
+
+.expand-icon {
+  transition: transform 0.2s ease;
+  font-size: 0.75em; /* Reduced from 0.8em */
+}
+
+.note-menu {
+  position: relative;
+  z-index: 20; /* Higher z-index to ensure dropdown appears above other elements */
+}
+
+.menu-dots {
+  padding: 0.5em;
+  border-radius: 50%;
+  transition: background 0.2s ease;
+  font-size: 1.1em; /* Slightly reduced */
+}
+
+.menu-dots:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: -10px; /* Position above the button instead of below */
+  right: 0;
+  background: #333;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 100; /* Very high z-index to ensure it appears above everything */
+  min-width: 100px;
+  margin-top: 4px;
+  transform: translateY(-100%); /* Move it completely above the three-dots */
+}
+
+/* Alternative positioning when near top of container */
+.menu-dropdown.below {
+  top: 100%;
+  transform: translateY(0);
+}
+
+.delete-btn {
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  width: 100%;
+  padding: 0.65em 1em; /* Slightly reduced padding */
+  font-size: 0.9em; /* Reduced from 0.95em */
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-radius: 6px;
+}
+
+.delete-btn:hover {
+  background: #c0392b;
+}
+
+.note-content {
+  padding: 0 1.5em 1.5em 1.5em;
+  border-top: 1px solid #333;
+  animation: slideDown 0.3s ease;
+  color: #fff; /* Ensure content text is white */
+}
+
+.note-content a {
+  color: #41d1ff;
+  word-break: break-all;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+    padding-top: 0;
+    padding-bottom: 1.5em;
+  }
+}
+
+/* Update existing card styles to work with note cards */
+.card {
+  padding: 1.5em;
+  background: #222;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  margin-bottom: 1em;
+  color: #fff; /* Ensure card text is white */
+}
+
+.card pre {
+  background: #181818;
+  color: #fff;
+  padding: 0.7em;
+  border-radius: 6px;
+  font-size: 0.9em; /* Reduced from 0.98em */
+  margin: 0.5em 0 0 0;
+  overflow-x: auto;
+}
+
+.card a {
+  color: #41d1ff;
+  word-break: break-all;
+}
+
+.note-form {
+  background: #191919;
+  border-radius: 10px;
+  padding: 1.5em;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.form-row {
+  margin-bottom: 1em;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-row:last-child {
+  margin-bottom: 0;
+}
+
+.checkbox-row {
+  flex-direction: row;
+  gap: 1.5em;
+  align-items: center;
+  margin-bottom: 1em;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  color: #fff;
+  font-size: 0.9em; /* Reduced from 0.95em */
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #41d1ff;
+  cursor: pointer;
+}
+
+.title-input,
+.field-input {
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #181818;
+  color: #fff;
+  padding: 0.75em;
+  font-size: 0.95em; /* Reduced from 1em */
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.field-input {
+  resize: vertical;
+}
+
+.title-input {
+  font-weight: 500;
+}
+
+.add-note-btn {
+  background: #646cff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.75em 2em;
+  font-size: 0.95em; /* Reduced from 1em */
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  align-self: flex-start;
+}
+
+.add-note-btn:hover {
+  background: #535bf2;
+}
+
+.card button {
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.3em 0.8em;
+  font-size: 0.9em; /* Reduced from 0.95em */
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.card button:hover {
+  background: #c0392b;
+}
