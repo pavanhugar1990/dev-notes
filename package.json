@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "server": "node server/index.js",
+    "server": "nodemon --quiet --watch server --ext js,json --exec node server/index.js",
     "dev": "concurrently \"npm:server\" \"vite\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -30,6 +30,7 @@
     "globals": "^16.3.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.35.1",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "nodemon": "^3.1.7"
   }
 }

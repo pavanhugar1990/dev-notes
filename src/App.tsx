@@ -12,7 +12,14 @@ interface Note {
   tags?: string[];
 }
 
-const TABS = ['Notes', 'Search', 'Tags', 'Web Search'] as const;
+interface Task {
+  id: string;
+  title: string;
+  done: boolean;
+  createdAt: number;
+}
+
+const TABS = ['Notes', 'Search', 'Tags', 'Tasks', 'Calendar', 'Web Search'] as const;
 type Tab = typeof TABS[number];
 
 function App() {
@@ -37,14 +44,32 @@ function App() {
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [openMenus, setOpenMenus] = useState<Set<string>>(new Set());
 
-  // Load notes from API on mount
+  // Tasks and calendar
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [calendarUrl, setCalendarUrl] = useState('')
+  const [calendarSavedUrl, setCalendarSavedUrl] = useState('')
+  const [calendarEditing, setCalendarEditing] = useState(false)
+  const [taskError, setTaskError] = useState<string | null>(null)
+  const [openTaskMenus, setOpenTaskMenus] = useState<Set<string>>(new Set())
+  const [calendarFullscreen, setCalendarFullscreen] = useState(false)
+  const [lastTabBeforeCalendar, setLastTabBeforeCalendar] = useState<Tab>('Notes')
+
+  // Load initial data
   useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch('/api/notes')
-        if (!resp.ok) throw new Error('Failed to fetch notes')
-        const data: Note[] = await resp.json()
-        setNotes(data)
+        const [notesResp, tasksResp, calResp] = await Promise.all([
+          fetch('/api/notes'),
+          fetch('/api/tasks'),
+          fetch('/api/settings/calendarUrl'),
+        ])
+        if (notesResp.ok) setNotes(await notesResp.json())
+        if (tasksResp.ok) setTasks(await tasksResp.json())
+        if (calResp.ok) {
+          const j = await calResp.json()
+          if (j && typeof j.value === 'string') { setCalendarUrl(j.value); setCalendarSavedUrl(j.value) }
+        }
       } catch (e) {
         console.error(e)
       }
@@ -55,6 +80,24 @@ function App() {
   useEffect(() => {
     Prism.highlightAll();
   }, [notes, activeTab, search, selectedTag])
+
+  // Enter/exit fullscreen automatically when switching to/from Calendar tab
+  useEffect(() => {
+    if (activeTab !== 'Calendar') setLastTabBeforeCalendar(activeTab)
+    setCalendarFullscreen(activeTab === 'Calendar')
+  }, [activeTab])
+
+  // Allow ESC to exit fullscreen back to previous tab
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && calendarFullscreen) {
+        setCalendarFullscreen(false)
+        setActiveTab(lastTabBeforeCalendar)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [calendarFullscreen, lastTabBeforeCalendar])
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault()
@@ -132,6 +175,66 @@ function App() {
       newSet.delete(id);
       return newSet;
     });
+  }
+
+  // Tasks
+  async function addTask(e: React.FormEvent) {
+    e.preventDefault()
+    setTaskError(null)
+    if (!newTaskTitle.trim()) return
+    try {
+      const resp = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTaskTitle.trim() }),
+      })
+      if (!resp.ok) throw new Error('Failed to add task')
+      const created: Task = await resp.json()
+      setTasks(prev => [created, ...prev])
+      setNewTaskTitle('')
+    } catch (err) {
+      console.error(err)
+      setTaskError('Failed to add task. Is the server running?')
+    }
+  }
+
+  async function toggleTaskDone(task: Task) {
+    try {
+      await fetch(`/api/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ done: !task.done })
+      })
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, done: !t.done } : t))
+    } catch (err) { console.error(err) }
+  }
+
+  function toggleTaskMenu(id: string) {
+    setOpenTaskMenus(prev => {
+      const s = new Set(prev)
+      if (s.has(id)) s.delete(id); else { s.clear(); s.add(id) }
+      return s
+    })
+  }
+
+  async function deleteTask(id: string) {
+    try {
+      await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+      setTasks(prev => prev.filter(t => t.id !== id))
+    } catch (err) { console.error(err) }
+    setOpenTaskMenus(prev => { const s = new Set(prev); s.delete(id); return s })
+  }
+
+  async function saveCalendarUrl() {
+    try {
+      await fetch('/api/settings/calendarUrl', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: calendarUrl.trim() || null })
+      })
+      setCalendarSavedUrl(calendarUrl.trim())
+      setCalendarEditing(false)
+    } catch (err) { console.error(err) }
   }
 
   // Search and tag filtering
@@ -296,12 +399,16 @@ function App() {
     }
   }
 
-  function renderNoteCard(note: Note) {
+  const stickyClasses = ['sticky-yellow', 'sticky-blue', 'sticky-pink', 'sticky-green'];
+
+  function renderStickyCard(note: Note, index: number) {
     const isExpanded = expandedNotes.has(note.id);
     const isMenuOpen = openMenus.has(note.id);
+    const colorClass = stickyClasses[index % stickyClasses.length];
 
     return (
-      <div key={note.id} className="note-card" style={{ textAlign: 'left', marginBottom: 16, maxWidth: 600 }}>
+      <div key={note.id} className={`note-card sticky ${colorClass}`} style={{ maxWidth: 360 }}>
+        <div className="pin" />
         <div className="note-header">
           <div 
             className="note-title" 
@@ -309,7 +416,7 @@ function App() {
             style={{ cursor: 'pointer' }}
           >
             <strong>{note.title}</strong>
-            <span className="expand-icon" style={{ marginLeft: 8, fontSize: '0.8em', color: '#aaa' }}>
+            <span className="expand-icon" style={{ marginLeft: 8, fontSize: '0.8em', color: '#555' }}>
               {isExpanded ? '▼' : '▶'}
             </span>
           </div>
@@ -317,12 +424,12 @@ function App() {
             <button 
               className="menu-dots"
               onClick={() => toggleMenu(note.id)}
-              style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '1.2em' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2em' }}
             >
               ⋮
             </button>
             {isMenuOpen && (
-              <div className="menu-dropdown">
+              <div className="menu-dropdown below">
                 <button 
                   onClick={() => deleteNote(note.id)} 
                   className="delete-btn"
@@ -377,7 +484,7 @@ function App() {
           <span style={{ fontSize: 12, color: '#aaa' }}>by Pavan Hugar, Vibe Coding</span>
         </div>
       </aside>
-      <main className="main-content">
+      <main className="main-content" style={{ width: '100%' }}>
         {activeTab === 'Notes' && (
           <>
             <form onSubmit={addNote} className="note-form" style={{ marginBottom: 24, maxWidth: 600 }}>
@@ -460,14 +567,14 @@ function App() {
               </div>
             </form>
             
-            <div>
+            <div className="scratchpad-grid" style={{ width: '100%' }}>
               {notes.length === 0 && <p>No notes yet.</p>}
-              {notes.map(renderNoteCard)}
+              {notes.map((n, i) => renderStickyCard(n, i))}
             </div>
           </>
         )}
         {activeTab === 'Search' && (
-          <div style={{ maxWidth: 600 }}>
+          <div style={{ maxWidth: '100%', width: '100%' }}>
             <input
               type="text"
               placeholder="Search notes..."
@@ -475,14 +582,14 @@ function App() {
               onChange={e => setSearch(e.target.value)}
               style={{ width: '100%', marginBottom: 16, padding: 8, borderRadius: 6, border: '1px solid #444', background: '#181818', color: '#fff' }}
             />
-            <div>
+            <div className="scratchpad-grid">
               {filteredNotes.length === 0 && <p>No notes found.</p>}
-              {filteredNotes.map(renderNoteCard)}
+              {filteredNotes.map((n, i) => renderStickyCard(n, i))}
             </div>
           </div>
         )}
         {activeTab === 'Tags' && (
-          <div style={{ maxWidth: 600 }}>
+          <div style={{ maxWidth: '100%', width: '100%' }}>
             <div style={{ marginBottom: 16 }}>
               {allTags.length === 0 && <p>No tags yet.</p>}
               {allTags.map(tag => (
@@ -496,11 +603,90 @@ function App() {
                 </button>
               ))}
             </div>
-            <div>
+            <div className="scratchpad-grid">
               {filteredNotes.length === 0 && <p>No notes for this tag.</p>}
-              {filteredNotes.map(renderNoteCard)}
+              {filteredNotes.map((n, i) => renderStickyCard(n, i))}
             </div>
           </div>
+        )}
+        {activeTab === 'Tasks' && (
+          <div style={{ width: '100%' }}>
+            <div className="panel-card" style={{ marginBottom: 16 }}>
+              <h3 style={{ marginTop: 0 }}>To-do</h3>
+              <form onSubmit={addTask} className="form-row" style={{ flexDirection: 'row', gap: 8 }}>
+                <input
+                  type="text"
+                  placeholder="New task"
+                  value={newTaskTitle}
+                  onChange={e => { setNewTaskTitle(e.target.value); setTaskError(null); }}
+                  className="field-input"
+                  style={{ flex: 1 }}
+                />
+                <button type="submit">Add</button>
+              </form>
+              {taskError && <div style={{ color: '#e74c3c', marginTop: 6 }}>{taskError}</div>}
+              <div className="tasks-list" style={{ marginTop: 8 }}>
+                {tasks.map(t => {
+                  const isMenuOpen = openTaskMenus.has(t.id);
+                  return (
+                    <div key={t.id} className="note-card" style={{ padding: '0.8rem' }}>
+                      <div className="note-header" style={{ padding: 0 }}>
+                        <div className="note-title" style={{ cursor: 'default' }}>
+                          <input type="checkbox" checked={t.done} onChange={() => toggleTaskDone(t)} style={{ marginRight: 8 }} />
+                          <strong className={`task-title ${t.done ? 'done' : ''}`}>{t.title}</strong>
+                        </div>
+                        <div className="note-menu">
+                          <button className="menu-dots" onClick={() => toggleTaskMenu(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2em' }}>⋮</button>
+                          {isMenuOpen && (
+                            <div className="menu-dropdown">
+                              <button onClick={() => deleteTask(t.id)} className="delete-btn">Delete</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {tasks.length === 0 && <div style={{ color: '#aaa' }}>No tasks yet.</div>}
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'Calendar' && (
+          <>
+            {calendarFullscreen && (
+              <div className="fullscreen-overlay">
+                <div className="fullscreen-toolbar">
+                  <h3 style={{ margin: 0 }}>Calendar</h3>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => { setCalendarFullscreen(false); setActiveTab(lastTabBeforeCalendar) }}>Back</button>
+                    <button className="menu-dots" onClick={() => setCalendarEditing(v => !v)} style={{ background: 'none', border: '1px solid #333' }}>⋮</button>
+                  </div>
+                </div>
+                {calendarEditing && (
+                  <>
+                    <div className="form-row">
+                      <input
+                        type="text"
+                        placeholder="Embed URL (Google/Outlook/Zoom)"
+                        value={calendarUrl}
+                        onChange={e => setCalendarUrl(e.target.value)}
+                        className="field-input"
+                      />
+                    </div>
+                    {(calendarUrl.trim() !== calendarSavedUrl.trim()) && (
+                      <button onClick={saveCalendarUrl} style={{ marginBottom: 12 }}>Save URL</button>
+                    )}
+                  </>
+                )}
+                {calendarSavedUrl ? (
+                  <iframe className="calendar-iframe-full" src={calendarSavedUrl} title="Calendar Fullscreen" />
+                ) : (
+                  <div style={{ color: '#aaa' }}>Paste a public calendar embed URL to view it here. Open the menu (⋮) to edit.</div>
+                )}
+              </div>
+            )}
+          </>
         )}
         {activeTab === 'Web Search' && (
           <div style={{ maxWidth: 600 }}>
