@@ -37,35 +37,49 @@ function App() {
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [openMenus, setOpenMenus] = useState<Set<string>>(new Set());
 
-  // Load notes from localStorage on mount
+  // Load notes from API on mount
   useEffect(() => {
-    const stored = localStorage.getItem('dev-notes')
-    if (stored) setNotes(JSON.parse(stored))
+    (async () => {
+      try {
+        const resp = await fetch('/api/notes')
+        if (!resp.ok) throw new Error('Failed to fetch notes')
+        const data: Note[] = await resp.json()
+        setNotes(data)
+      } catch (e) {
+        console.error(e)
+      }
+    })()
   }, [])
-
-  // Save notes to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('dev-notes', JSON.stringify(notes))
-  }, [notes])
 
   // Highlight code after render
   useEffect(() => {
     Prism.highlightAll();
   }, [notes, activeTab, search, selectedTag])
 
-  function addNote(e: React.FormEvent) {
+  async function addNote(e: React.FormEvent) {
     e.preventDefault()
     if (!title.trim()) return
-    setNotes([
-      ...notes,
-      {
-        id: Date.now().toString(),
-        title: title.trim(),
-        url: showUrl && url.trim() ? url.trim() : undefined,
-        code: showCode && code.trim() ? code.trim() : undefined,
-        tags: showTags && tagsInput.trim() ? tagsInput.split(',').map(t => t.trim()).filter(Boolean) : undefined,
-      },
-    ])
+
+    const payload = {
+      title: title.trim(),
+      url: showUrl && url.trim() ? url.trim() : undefined,
+      code: showCode && code.trim() ? code.trim() : undefined,
+      tags: showTags && tagsInput.trim() ? tagsInput.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+    }
+
+    try {
+      const resp = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!resp.ok) throw new Error('Failed to create note')
+      const created: Note = await resp.json()
+      setNotes(prev => [...prev, created])
+    } catch (err) {
+      console.error(err)
+    }
+
     setTitle('')
     setUrl('')
     setCode('')
@@ -93,15 +107,21 @@ function App() {
       if (newSet.has(noteId)) {
         newSet.delete(noteId);
       } else {
-        newSet.clear(); // Close other menus
+        newSet.clear();
         newSet.add(noteId);
       }
       return newSet;
     });
   }
 
-  function deleteNote(id: string) {
-    setNotes(notes.filter((n) => n.id !== id))
+  async function deleteNote(id: string) {
+    try {
+      const resp = await fetch(`/api/notes/${id}`, { method: 'DELETE' })
+      if (!resp.ok && resp.status !== 204) throw new Error('Failed to delete note')
+      setNotes(notes.filter((n) => n.id !== id))
+    } catch (err) {
+      console.error(err)
+    }
     setOpenMenus(prev => {
       const newSet = new Set(prev);
       newSet.delete(id);
@@ -134,9 +154,7 @@ function App() {
     setWebSearchResult(null);
     
     try {
-      // Expanded local dictionary of common tech and general abbreviations
       const abbreviationDict: Record<string, string> = {
-        // Tech abbreviations
         'API': 'Application Programming Interface',
         'HTML': 'HyperText Markup Language',
         'CSS': 'Cascading Style Sheets',
@@ -186,8 +204,6 @@ function App() {
         'AWS': 'Amazon Web Services',
         'GCP': 'Google Cloud Platform',
         'Azure': 'Microsoft Azure',
-        
-        // Common general abbreviations
         'FAQ': 'Frequently Asked Questions',
         'CEO': 'Chief Executive Officer',
         'CTO': 'Chief Technology Officer',
@@ -248,27 +264,20 @@ function App() {
 
       const upperQuery = webSearchQuery.toUpperCase();
       
-      // Check local dictionary first
       if (abbreviationDict[upperQuery]) {
         setWebSearchResult(abbreviationDict[upperQuery]);
         return;
       }
 
-      // Try Wikipedia API as backup for other abbreviations
       try {
         const wikiResponse = await fetch(
           `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(webSearchQuery)}`,
-          {
-            headers: {
-              'Accept': 'application/json'
-            }
-          }
+          { headers: { 'Accept': 'application/json' } }
         );
         
         if (wikiResponse.ok) {
           const wikiData = await wikiResponse.json();
           if (wikiData.extract) {
-            // Take first sentence of Wikipedia extract
             const firstSentence = wikiData.extract.split('.')[0] + '.';
             setWebSearchResult(firstSentence);
             return;
@@ -278,7 +287,6 @@ function App() {
         console.log('Wikipedia lookup failed:', wikiError);
       }
 
-      // If nothing found, show helpful message
       setWebSearchResult(`No definition found for "${webSearchQuery}". Try common abbreviations like API, HTML, CSS, JS, HTTP, AI, ML, etc.`);
       
     } catch (err) {
@@ -286,6 +294,68 @@ function App() {
     } finally {
       setWebSearchLoading(false);
     }
+  }
+
+  function renderNoteCard(note: Note) {
+    const isExpanded = expandedNotes.has(note.id);
+    const isMenuOpen = openMenus.has(note.id);
+
+    return (
+      <div key={note.id} className="note-card" style={{ textAlign: 'left', marginBottom: 16, maxWidth: 600 }}>
+        <div className="note-header">
+          <div 
+            className="note-title" 
+            onClick={() => toggleNoteExpansion(note.id)}
+            style={{ cursor: 'pointer' }}
+          >
+            <strong>{note.title}</strong>
+            <span className="expand-icon" style={{ marginLeft: 8, fontSize: '0.8em', color: '#aaa' }}>
+              {isExpanded ? '▼' : '▶'}
+            </span>
+          </div>
+          <div className="note-menu">
+            <button 
+              className="menu-dots"
+              onClick={() => toggleMenu(note.id)}
+              style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '1.2em' }}
+            >
+              ⋮
+            </button>
+            {isMenuOpen && (
+              <div className="menu-dropdown">
+                <button 
+                  onClick={() => deleteNote(note.id)} 
+                  className="delete-btn"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        {isExpanded && (
+          <div className="note-content">
+            {note.url && (
+              <div style={{ marginTop: 8 }}>
+                <a href={note.url} target="_blank" rel="noopener noreferrer">{note.url}</a>
+              </div>
+            )}
+            {note.code && (
+              <pre className="language-js" style={{ marginTop: 8 }}>
+                <code className="language-js">{note.code}</code>
+              </pre>
+            )}
+            {note.tags && note.tags.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                {note.tags.map(tag => (
+                  <span key={tag} className="tag-badge">{tag}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -311,7 +381,6 @@ function App() {
         {activeTab === 'Notes' && (
           <>
             <form onSubmit={addNote} className="note-form" style={{ marginBottom: 24, maxWidth: 600 }}>
-              {/* Title field - always visible */}
               <div className="form-row">
                 <input
                   type="text"
@@ -323,7 +392,6 @@ function App() {
                 />
               </div>
               
-              {/* Checkboxes row */}
               <div className="form-row checkbox-row">
                 <label className="checkbox-label">
                   <input
@@ -351,7 +419,6 @@ function App() {
                 </label>
               </div>
 
-              {/* Conditional fields */}
               {showUrl && (
                 <div className="form-row">
                   <input
@@ -388,7 +455,6 @@ function App() {
                 </div>
               )}
 
-              {/* Add Note button on new line */}
               <div className="form-row">
                 <button type="submit" className="add-note-btn">Add Note</button>
               </div>
@@ -396,68 +462,7 @@ function App() {
             
             <div>
               {notes.length === 0 && <p>No notes yet.</p>}
-              {notes.map(note => {
-                const isExpanded = expandedNotes.has(note.id);
-                const isMenuOpen = openMenus.has(note.id);
-                
-                return (
-                  <div key={note.id} className="note-card" style={{ textAlign: 'left', marginBottom: 16, maxWidth: 600 }}>
-                    <div className="note-header">
-                      <div 
-                        className="note-title" 
-                        onClick={() => toggleNoteExpansion(note.id)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <strong>{note.title}</strong>
-                        <span className="expand-icon" style={{ marginLeft: 8, fontSize: '0.8em', color: '#aaa' }}>
-                          {isExpanded ? '▼' : '▶'}
-                        </span>
-                      </div>
-                      <div className="note-menu">
-                        <button 
-                          className="menu-dots"
-                          onClick={() => toggleMenu(note.id)}
-                          style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '1.2em' }}
-                        >
-                          ⋮
-                        </button>
-                        {isMenuOpen && (
-                          <div className="menu-dropdown">
-                            <button 
-                              onClick={() => deleteNote(note.id)} 
-                              className="delete-btn"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {isExpanded && (
-                      <div className="note-content">
-                        {note.url && (
-                          <div style={{ marginTop: 8 }}>
-                            <a href={note.url} target="_blank" rel="noopener noreferrer">{note.url}</a>
-                          </div>
-                        )}
-                        {note.code && (
-                          <pre className="language-js" style={{ marginTop: 8 }}>
-                            <code className="language-js">{note.code}</code>
-                          </pre>
-                        )}
-                        {note.tags && note.tags.length > 0 && (
-                          <div style={{ marginTop: 8 }}>
-                            {note.tags.map(tag => (
-                              <span key={tag} className="tag-badge">{tag}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {notes.map(renderNoteCard)}
             </div>
           </>
         )}
@@ -472,31 +477,7 @@ function App() {
             />
             <div>
               {filteredNotes.length === 0 && <p>No notes found.</p>}
-              {filteredNotes.map(note => (
-                <div key={note.id} className="card" style={{ textAlign: 'left', marginBottom: 16, maxWidth: 600 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong>{note.title}</strong>
-                    <button onClick={() => deleteNote(note.id)} style={{ marginLeft: 8 }}>Delete</button>
-                  </div>
-                  {note.url && (
-                    <div style={{ marginTop: 8 }}>
-                      <a href={note.url} target="_blank" rel="noopener noreferrer">{note.url}</a>
-                    </div>
-                  )}
-                  {note.code && (
-                    <pre className="language-js" style={{ marginTop: 8 }}>
-                      <code className="language-js">{note.code}</code>
-                    </pre>
-                  )}
-                  {note.tags && note.tags.length > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      {note.tags.map(tag => (
-                        <span key={tag} className="tag-badge">{tag}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {filteredNotes.map(renderNoteCard)}
             </div>
           </div>
         )}
@@ -517,31 +498,7 @@ function App() {
             </div>
             <div>
               {filteredNotes.length === 0 && <p>No notes for this tag.</p>}
-              {filteredNotes.map(note => (
-                <div key={note.id} className="card" style={{ textAlign: 'left', marginBottom: 16, maxWidth: 600 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong>{note.title}</strong>
-                    <button onClick={() => deleteNote(note.id)} style={{ marginLeft: 8 }}>Delete</button>
-                  </div>
-                  {note.url && (
-                    <div style={{ marginTop: 8 }}>
-                      <a href={note.url} target="_blank" rel="noopener noreferrer">{note.url}</a>
-                    </div>
-                  )}
-                  {note.code && (
-                    <pre className="language-js" style={{ marginTop: 8 }}>
-                      <code className="language-js">{note.code}</code>
-                    </pre>
-                  )}
-                  {note.tags && note.tags.length > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      {note.tags.map(tag => (
-                        <span key={tag} className="tag-badge">{tag}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {filteredNotes.map(renderNoteCard)}
             </div>
           </div>
         )}
